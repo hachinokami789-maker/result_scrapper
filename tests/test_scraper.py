@@ -1,10 +1,13 @@
 from datetime import date
+from http.client import IncompleteRead
 import unittest
+from unittest.mock import patch
 
 from result_scraper.scraper import (
     DrawResult,
     ResultNotPublished,
     parse_special_prize,
+    scrape_date,
 )
 
 
@@ -57,6 +60,40 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(result.variation_c, "34012")
         self.assertEqual(result.variation_d, "04123")
 
+    def test_incomplete_http_body_retries_the_next_official_url(self) -> None:
+        class Response:
+            def __init__(self, body: bytes | str | None = None) -> None:
+                self.body = body
+
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                return None
+
+            def read(self, _: int) -> bytes | str:
+                if self.body is None:
+                    raise IncompleteRead(b"partial", 100)
+                return self.body
+
+        class Opener:
+            def __init__(self) -> None:
+                self.responses = [Response(), Response(TABLE_HTML)]
+                self.open_count = 0
+
+            def open(self, *_: object, **__: object) -> Response:
+                response = self.responses[self.open_count]
+                self.open_count += 1
+                return response
+
+        opener = Opener()
+        with patch("result_scraper.scraper.build_opener", return_value=opener):
+            result = scrape_date(DRAW_DATE, max_attempts=1)
+
+        self.assertEqual(result.grand_prize, "33775")
+        self.assertEqual(opener.open_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+
