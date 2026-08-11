@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nam-dinh-result-scraper"
+version = "1.0.0"
+description = "Daily Nam Dinh grand-prize scraper for Thinhnam"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "lxml>=5.0,<7",
+  "openpyxl>=3.1,<4",
+]
+
+[project.scripts]
+nam-dinh-scrape = "result_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
