@@ -7,3 +7,5 @@ node_modules/
 .codex-artifacts/
 *.tmp.xlsx
 *.inspect.ndjson
+~$*.xlsx
+
