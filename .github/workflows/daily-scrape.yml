@@ -147,6 +147,7 @@ jobs:
             --output outputs/result_scraping/nam_dinh_results.xlsx
             --delay "$REQUEST_DELAY"
             --timeout 30
+            --workers 3
             --checkpoint-every 25)
           if [[ -n "$END_DATE" ]]; then
             command+=(--end-date "$END_DATE")
