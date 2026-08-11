@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay", type=float, default=0.6)
     parser.add_argument("--checkpoint-every", type=int, default=25)
     parser.add_argument("--max-attempts", type=int, default=4)
+    parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument(
         "--refresh-existing",
         action="store_true",
@@ -67,6 +68,8 @@ def run(args: argparse.Namespace) -> int:
     end_date = args.end_date or _today_ict()
     if args.delay < 0:
         raise ValueError("delay cannot be negative")
+    if args.timeout <= 0:
+        raise ValueError("timeout must be positive")
     if args.checkpoint_every < 1:
         raise ValueError("checkpoint-every must be at least 1")
 
@@ -90,6 +93,7 @@ def run(args: argparse.Namespace) -> int:
         try:
             result = scrape_date(
                 draw_date,
+                timeout_seconds=args.timeout,
                 max_attempts=args.max_attempts,
             )
         except ScrapeError as exc:

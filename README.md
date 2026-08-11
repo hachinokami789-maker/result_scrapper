@@ -41,6 +41,19 @@ temporarily unavailable or a result has not been published, the workflow still
 commits completed checkpoints, reports a failure, and retries only the missing
 dates on the next run.
 
+### VPN or proxy access
+
+If Thinhnam is not directly reachable from GitHub-hosted runners, add a
+repository Actions secret named `THINHNAM_PROXY_URL`. Its value must be a full
+HTTP/HTTPS proxy URL, for example `http://user:password@proxy.example:8080`.
+Never commit the proxy URL or credentials to the repository. The workflow runs
+a known-date connectivity check before starting the long backfill, so missing
+network access fails quickly without discarding an existing workbook.
+
+A browser-only VPN extension cannot be used by GitHub Actions. In that case,
+use a proxy service that supplies an HTTP/HTTPS endpoint or run the workflow on
+a self-hosted runner connected through a system-level VPN.
+
 ## Run locally
 
 Python 3.11 or newer is required.

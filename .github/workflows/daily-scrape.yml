@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: nam-dinh-result-writer
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   scrape:
@@ -41,6 +41,7 @@ jobs:
     env:
       TZ: Asia/Phnom_Penh
       PYTHONUNBUFFERED: "1"
+      THINHNAM_PROXY_URL: ${{ secrets.THINHNAM_PROXY_URL }}
 
     steps:
       - name: Check out repository
@@ -58,6 +59,16 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
+      - name: Check official-site connectivity
+        run: |
+          python -m result_scraper \
+            --start-date 2026-08-11 \
+            --end-date 2026-08-11 \
+            --output "$RUNNER_TEMP/thinhnam-connectivity.xlsx" \
+            --delay 0 \
+            --timeout 20 \
+            --max-attempts 1
+
       - name: Collect missing results
         id: collect
         shell: bash
@@ -71,6 +82,7 @@ jobs:
             --start-date "$START_DATE"
             --output outputs/result_scraping/nam_dinh_results.xlsx
             --delay "$REQUEST_DELAY"
+            --timeout 30
             --checkpoint-every 25)
           if [[ -n "$END_DATE" ]]; then
             command+=(--end-date "$END_DATE")

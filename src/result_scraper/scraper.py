@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 import html as html_module
+import os
 import re
 import socket
 import time
 import unicodedata
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from lxml import html
 
@@ -238,13 +239,19 @@ def scrape_date(
         "Accept-Language": "vi,en-US;q=0.8,en;q=0.6",
         "Cache-Control": "no-cache",
     }
+    proxy_url = os.environ.get("THINHNAM_PROXY_URL", "").strip()
+    opener = (
+        build_opener(ProxyHandler({"http": proxy_url, "https": proxy_url}))
+        if proxy_url
+        else build_opener()
+    )
 
     for attempt in range(1, max_attempts + 1):
         for template in templates:
             url = source_url(draw_date, template)
             request = Request(url, headers=headers, method="GET")
             try:
-                with urlopen(request, timeout=timeout_seconds) as response:
+                with opener.open(request, timeout=timeout_seconds) as response:
                     body = response.read(8_000_001)
                     if len(body) > 8_000_000:
                         raise ScrapeError("official page exceeded the 8 MB safety limit")
