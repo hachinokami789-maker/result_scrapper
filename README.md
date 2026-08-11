@@ -41,6 +41,10 @@ temporarily unavailable or a result has not been published, the workflow still
 commits completed checkpoints, reports a failure, and retries only the missing
 dates on the next run.
 
+Historical collection uses three bounded workers. This keeps the request rate
+modest while avoiding the long runtime and timeout risk of sending thousands of
+Tor-routed requests strictly one at a time.
+
 ### Restricted-network access
 
 The workflow automatically starts a Tor route when Thinhnam is not directly
