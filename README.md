@@ -41,18 +41,22 @@ temporarily unavailable or a result has not been published, the workflow still
 commits completed checkpoints, reports a failure, and retries only the missing
 dates on the next run.
 
-### VPN or proxy access
+### Restricted-network access
 
-If Thinhnam is not directly reachable from GitHub-hosted runners, add a
-repository Actions secret named `THINHNAM_PROXY_URL`. Its value must be a full
-HTTP/HTTPS proxy URL, for example `http://user:password@proxy.example:8080`.
-Never commit the proxy URL or credentials to the repository. The workflow runs
-a known-date connectivity check before starting the long backfill, so missing
-network access fails quickly without discarding an existing workbook.
+The workflow automatically starts a Tor route when Thinhnam is not directly
+reachable. This is self-contained on the GitHub-hosted runner: no browser VPN,
+account, or credentials are required, and the scraper still requests only the
+official Thinhnam URLs listed above.
 
-A browser-only VPN extension cannot be used by GitHub Actions. In that case,
-use a proxy service that supplies an HTTP/HTTPS endpoint or run the workflow on
-a self-hosted runner connected through a system-level VPN.
+If the site rejects Tor traffic, an optional private HTTP/HTTPS proxy can be
+used instead. Add a repository Actions secret named `THINHNAM_PROXY_URL` whose
+value is the complete proxy URL, for example
+`http://user:password@proxy.example:8080`. Never commit that URL or its
+credentials to the repository. When this secret exists, the workflow uses it
+instead of Tor.
+
+The workflow checks a known result page before starting the long backfill, so
+network failures stop quickly without discarding an existing workbook.
 
 ## Run locally
 
@@ -84,3 +88,4 @@ The parser validates the requested date, selects the Nam Định column, locates
 the `Giải Đặc Biệt` row, and rejects any value that is not exactly five digits.
 It uses a short delay plus bounded retries to avoid placing unnecessary load on
 the official site.
+
