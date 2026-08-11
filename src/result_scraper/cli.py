@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from pathlib import Path
 import sys
@@ -52,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-attempts", type=int, default=4)
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of concurrent date fetches (the workflow uses a conservative 3).",
+    )
+    parser.add_argument(
         "--refresh-existing",
         action="store_true",
         help="Fetch dates even if they are already present in the workbook.",
@@ -70,6 +78,8 @@ def run(args: argparse.Namespace) -> int:
         raise ValueError("delay cannot be negative")
     if args.timeout <= 0:
         raise ValueError("timeout must be positive")
+    if args.workers < 1:
+        raise ValueError("workers must be at least 1")
     if args.checkpoint_every < 1:
         raise ValueError("checkpoint-every must be at least 1")
 
@@ -87,9 +97,7 @@ def run(args: argparse.Namespace) -> int:
         f"{len(requested_dates) - len(pending)} already stored; {len(pending)} pending."
     )
 
-    batch: list[DrawResult] = []
-    failures: list[tuple[date, str]] = []
-    for index, draw_date in enumerate(pending, start=1):
+    def fetch_one(draw_date: date) -> tuple[date, DrawResult | None, str | None]:
         try:
             result = scrape_date(
                 draw_date,
@@ -97,9 +105,32 @@ def run(args: argparse.Namespace) -> int:
                 max_attempts=args.max_attempts,
             )
         except ScrapeError as exc:
-            failures.append((draw_date, str(exc)))
-            print(f"ERROR {draw_date}: {exc}", file=sys.stderr)
+            return draw_date, None, str(exc)
         else:
+            return draw_date, result, None
+        finally:
+            if args.delay:
+                time.sleep(args.delay)
+
+    def outcomes() -> Iterator[tuple[date, DrawResult | None, str | None]]:
+        if args.workers == 1:
+            for draw_date in pending:
+                yield fetch_one(draw_date)
+            return
+
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = [executor.submit(fetch_one, draw_date) for draw_date in pending]
+            for future in as_completed(futures):
+                yield future.result()
+
+    batch: list[DrawResult] = []
+    failures: list[tuple[date, str]] = []
+    for index, (draw_date, result, error) in enumerate(outcomes(), start=1):
+        if error is not None:
+            failures.append((draw_date, error))
+            print(f"ERROR {draw_date}: {error}", file=sys.stderr)
+        else:
+            assert result is not None
             batch.append(result)
             print(
                 f"OK {draw_date}: {result.grand_prize} "
@@ -110,9 +141,6 @@ def run(args: argparse.Namespace) -> int:
             total = upsert_results(args.output, batch)
             print(f"Checkpoint saved: {total} total rows in {args.output}")
             batch.clear()
-
-        if index < len(pending) and args.delay:
-            time.sleep(args.delay)
 
     if batch:
         total = upsert_results(args.output, batch)
@@ -135,3 +163,4 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
         return 2
+
