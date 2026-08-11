@@ -59,9 +59,36 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
-      - name: Check official-site connectivity
+      - name: Start automatic Tor network route
+        if: env.THINHNAM_PROXY_URL == ''
+        shell: bash
         run: |
-          python -m result_scraper \
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tor torsocks
+          sudo service tor start
+
+          for attempt in {1..30}; do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/9050' 2>/dev/null; then
+              echo "Tor SOCKS port is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Tor did not become ready within 30 seconds." >&2
+          exit 1
+
+      - name: Check official-site connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          launcher=(python)
+          if [[ -z "${THINHNAM_PROXY_URL:-}" ]]; then
+            launcher=(torsocks python)
+          fi
+
+          "${launcher[@]}" -m result_scraper \
             --start-date 2026-08-11 \
             --end-date 2026-08-11 \
             --output "$RUNNER_TEMP/thinhnam-connectivity.xlsx" \
@@ -78,7 +105,12 @@ jobs:
           REQUEST_DELAY: ${{ github.event.inputs.delay || '0.6' }}
         run: |
           set +e
-          command=(python -m result_scraper
+          launcher=(python)
+          if [[ -z "${THINHNAM_PROXY_URL:-}" ]]; then
+            launcher=(torsocks python)
+          fi
+
+          command=("${launcher[@]}" -m result_scraper
             --start-date "$START_DATE"
             --output outputs/result_scraping/nam_dinh_results.xlsx
             --delay "$REQUEST_DELAY"
@@ -112,3 +144,4 @@ jobs:
         run: |
           echo "One or more dates remain missing. Saved results were committed and the next run will retry only missing dates."
           exit 1
+
