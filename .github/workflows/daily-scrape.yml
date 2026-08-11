@@ -161,6 +161,7 @@ jobs:
         if: always() && !cancelled()
         shell: bash
         run: |
+          # Publish from the latest main tree so binary workbooks are never rebased.
           if git diff --quiet -- outputs/result_scraping/nam_dinh_results.xlsx; then
             echo "Workbook is already current."
             exit 0
