@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 import html as html_module
+from http.client import HTTPException
 import os
 import re
 import socket
@@ -257,7 +258,14 @@ def scrape_date(
                         raise ScrapeError("official page exceeded the 8 MB safety limit")
                     prize = parse_special_prize(body, draw_date)
                     return DrawResult(draw_date, prize, url)
-            except (HTTPError, URLError, TimeoutError, socket.timeout, ScrapeError) as exc:
+            except (
+                HTTPError,
+                URLError,
+                TimeoutError,
+                socket.timeout,
+                HTTPException,
+                ScrapeError,
+            ) as exc:
                 errors.append(f"{url}: {type(exc).__name__}: {exc}")
 
         if attempt < max_attempts:
@@ -267,3 +275,4 @@ def scrape_date(
     raise ScrapeError(
         f"failed to collect {draw_date.isoformat()} after {max_attempts} attempts: {detail}"
     )
+
