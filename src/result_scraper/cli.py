@@ -15,8 +15,27 @@ from .scraper import DrawResult, ScrapeError, scrape_date
 from .workbook import DEFAULT_OUTPUT, ensure_workbook, load_existing_results, upsert_results
 
 
-START_DATE = date(2020, 4, 2)
+START_DATE = date(2019, 1, 1)
 TIMEZONE = ZoneInfo("Asia/Phnom_Penh")
+
+HISTORICAL_DRAW_PARITY = {
+    (2019, 1): 0,
+    (2019, 2): 1,
+    (2019, 3): 1,
+    (2019, 4): 0,
+    (2019, 5): 0,
+    (2019, 6): 1,
+    (2019, 7): 1,
+    (2019, 8): 0,
+    (2019, 9): 1,
+    (2019, 10): 1,
+    (2019, 11): 0,
+    (2019, 12): 0,
+    (2020, 1): 1,
+    (2020, 2): 0,
+    (2020, 3): 1,
+}
+SKIPPED_DRAW_DATES = {date(2020, 4, 1)}
 
 
 def _parse_date(value: str) -> date:
@@ -37,6 +56,13 @@ def _date_range(start_date: date, end_date: date) -> list[date]:
         raise ValueError("end date cannot be before start date")
     days = (end_date - start_date).days
     return [start_date + timedelta(days=offset) for offset in range(days + 1)]
+
+
+def _is_scheduled_draw_date(draw_date: date) -> bool:
+    if draw_date in SKIPPED_DRAW_DATES:
+        return False
+    parity = HISTORICAL_DRAW_PARITY.get((draw_date.year, draw_date.month))
+    return parity is None or draw_date.day % 2 == parity
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,15 +112,19 @@ def run(args: argparse.Namespace) -> int:
     ensure_workbook(args.output)
     existing = load_existing_results(args.output)
     requested_dates = _date_range(args.start_date, end_date)
+    scheduled_dates = [
+        draw_date for draw_date in requested_dates if _is_scheduled_draw_date(draw_date)
+    ]
     pending = (
-        requested_dates
+        scheduled_dates
         if args.refresh_existing
-        else [draw_date for draw_date in requested_dates if draw_date not in existing]
+        else [draw_date for draw_date in scheduled_dates if draw_date not in existing]
     )
 
     print(
-        f"Requested {len(requested_dates)} dates ({args.start_date} through {end_date}); "
-        f"{len(requested_dates) - len(pending)} already stored; {len(pending)} pending."
+        f"Requested {len(requested_dates)} calendar dates ({args.start_date} through "
+        f"{end_date}); {len(scheduled_dates)} scheduled draw dates; "
+        f"{len(scheduled_dates) - len(pending)} already stored; {len(pending)} pending."
     )
 
     def fetch_one(draw_date: date) -> tuple[date, DrawResult | None, str | None]:
@@ -134,7 +164,7 @@ def run(args: argparse.Namespace) -> int:
             batch.append(result)
             print(
                 f"OK {draw_date}: {result.grand_prize} "
-                f"-> {result.variation_c}, {result.variation_d}"
+                f"-> {', '.join(result.digits)}"
             )
 
         if batch and (len(batch) >= args.checkpoint_every or index == len(pending)):

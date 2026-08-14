@@ -10,7 +10,7 @@ from result_scraper.workbook import HEADERS, SHEET_NAME, load_existing_results, 
 
 
 class WorkbookTests(unittest.TestCase):
-    def test_upsert_is_sorted_duplicate_safe_and_formula_driven(self) -> None:
+    def test_upsert_is_sorted_duplicate_safe_and_digit_formula_driven(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory) / "results.xlsx"
             upsert_results(
@@ -35,18 +35,16 @@ class WorkbookTests(unittest.TestCase):
             self.assertEqual(tuple(cell.value for cell in sheet[1]), HEADERS)
             self.assertEqual(sheet["B2"].value, 1234)
             self.assertEqual(sheet["B2"].number_format, "00000")
-            self.assertEqual(
-                sheet["C2"].value,
-                "=MOD(B2,100)*1000+INT(B2/100)",
-            )
-            self.assertEqual(sheet["C2"].number_format, "00000")
-            self.assertEqual(
-                sheet["D2"].value,
-                "=INT(B2/10000)*10000+MOD(B2,10)*1000+INT(MOD(B2,10000)/10)",
-            )
-            self.assertEqual(sheet["D2"].number_format, "00000")
+            self.assertEqual(sheet["C2"].value, "=INT(B2/10000)")
+            self.assertEqual(sheet["D2"].value, "=INT(MOD(B2,10000)/1000)")
+            self.assertEqual(sheet["E2"].value, "=INT(MOD(B2,1000)/100)")
+            self.assertEqual(sheet["F2"].value, "=INT(MOD(B2,100)/10)")
+            self.assertEqual(sheet["G2"].value, "=MOD(B2,10)")
+            for column in "CDEFG":
+                self.assertEqual(sheet[f"{column}2"].number_format, "0")
             self.assertEqual(sheet.freeze_panes, "A2")
             self.assertEqual(len(sheet.tables), 1)
+            self.assertEqual(next(iter(sheet.tables.values())).ref, "A1:G3")
             workbook.close()
 
 

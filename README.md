@@ -14,27 +14,34 @@ The canonical workbook is:
 
 `outputs/result_scraping/nam_dinh_results.xlsx`
 
-It contains exactly four columns:
+It contains exactly seven columns:
 
 | Column | Content | Example for `12345` |
 | --- | --- | --- |
 | A | Date | `2026-08-11` |
-| B | Nam Định grand prize | `12345` |
-| C | Last two digits moved to the front | `45123` |
-| D | Last digit moved behind the first | `15234` |
+| B | Nam Định grand prize result | `12345` |
+| C | 1st digit | `1` |
+| D | 2nd digit | `2` |
+| E | 3rd digit | `3` |
+| F | 4th digit | `4` |
+| G | 5th digit | `5` |
 
-Columns B–D use an explicit five-digit number format so leading zeroes are
-visible. Columns C and D are auditable Excel formulas based on Column B, so all
-three results remain five digits. Each date is unique: rerunning the scraper
-replaces that date instead of creating a duplicate.
+Column B uses an explicit five-digit number format so leading zeroes are
+visible. Columns C–G are auditable Excel formulas based on Column B. Each date
+is unique: rerunning the scraper replaces that date instead of creating a
+duplicate.
 
 ## Automation
 
 The GitHub Actions workflow runs daily at **13:45 Indochina Time**
 (**06:45 UTC**) and can also be started manually. Every run checks the full
-requested range beginning on **2020-04-02**, skips dates already in the
+requested range beginning on **2019-01-01**, skips dates already in the
 workbook, and fetches only missing dates. This makes the first run a resumable
 historical backfill and later runs inexpensive daily updates.
+
+For January 2019 through March 2020, the collector applies the historical
+odd/even day schedule for each month. It also always skips 2020-04-01 because
+no result is available. Dates after that are checked daily.
 
 The scraper checkpoints the workbook every 25 successful dates. If the site is
 temporarily unavailable or a result has not been published, the workflow still
@@ -69,8 +76,18 @@ Python 3.11 or newer is required.
 ```bash
 python -m pip install -e .
 python -m result_scraper \
-  --start-date 2020-04-02 \
+  --start-date 2019-01-01 \
   --output outputs/result_scraping/nam_dinh_results.xlsx
+```
+
+If Thinhnam is unreachable directly, a read-only page relay can be selected
+without changing the recorded official source URLs:
+
+```bash
+THINHNAM_READER_BASE=https://r.jina.ai python -m result_scraper \
+  --start-date 2019-01-01 \
+  --end-date 2020-03-31 \
+  --allow-missing
 ```
 
 To fetch one specific date:

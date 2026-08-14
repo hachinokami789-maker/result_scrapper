@@ -5,12 +5,40 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from result_scraper.cli import run
+from result_scraper.cli import HISTORICAL_DRAW_PARITY, _is_scheduled_draw_date, run
 from result_scraper.scraper import DrawResult
 from result_scraper.workbook import load_existing_results
 
 
 class ConcurrentCollectionTests(unittest.TestCase):
+    def test_historical_schedule_and_april_first_skip(self) -> None:
+        expected_parity = {
+            (2019, 1): 0,
+            (2019, 2): 1,
+            (2019, 3): 1,
+            (2019, 4): 0,
+            (2019, 5): 0,
+            (2019, 6): 1,
+            (2019, 7): 1,
+            (2019, 8): 0,
+            (2019, 9): 1,
+            (2019, 10): 1,
+            (2019, 11): 0,
+            (2019, 12): 0,
+            (2020, 1): 1,
+            (2020, 2): 0,
+            (2020, 3): 1,
+        }
+        self.assertEqual(HISTORICAL_DRAW_PARITY, expected_parity)
+        for (year, month), parity in expected_parity.items():
+            matching_day = 2 if parity == 0 else 3
+            opposite_day = 3 if parity == 0 else 2
+            self.assertTrue(_is_scheduled_draw_date(date(year, month, matching_day)))
+            self.assertFalse(_is_scheduled_draw_date(date(year, month, opposite_day)))
+        self.assertTrue(_is_scheduled_draw_date(date(2020, 3, 31)))
+        self.assertFalse(_is_scheduled_draw_date(date(2020, 4, 1)))
+        self.assertTrue(_is_scheduled_draw_date(date(2020, 4, 2)))
+
     def test_multiple_workers_store_every_date(self) -> None:
         start = date(2026, 8, 9)
         end = date(2026, 8, 11)

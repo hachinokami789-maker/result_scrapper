@@ -6,6 +6,7 @@ from unittest.mock import patch
 from result_scraper.scraper import (
     DrawResult,
     ResultNotPublished,
+    parse_reader_special_prize,
     parse_special_prize,
     scrape_date,
 )
@@ -39,6 +40,23 @@ TEXT_FALLBACK_HTML = """
 """
 
 
+READER_MARKDOWN = """
+[KẾT QUẢ XỔ SỐ Miền Nam](http://www.thinhnam.net.in/xo-so-mien-nam) -
+[02/01/2019 - 13h15’](http://www.thinhnam.net.in/xo-so-mien-nam/?ngay=2019-01-02)
+[02/01/2019](http://www.thinhnam.net.in/ket-qua-xo-so/?ngay=2019-01-02)
+Giải tám Giải bảy Giải sáu Giải năm Giải tư Giải ba Giải nhì Giải nhất
+[Giải Đặc Biệt](http://www.thinhnam.net.in/rules)
+[Nam Định](http://www.thinhnam.net.in/nam-dinh) XSNDH
+82 788 7655 3244 9561 17702 08913 10017 46971 37973 41859 97143 81640 77251 24751
+[Đà Nẵng](http://www.thinhnam.net.in/da-nang) XSDNG
+13 845 3460 9839 2230 98308 90979 05623 51740 13902 09433 20748 97298 31901 64212
+[KẾT QUẢ XỔ SỐ Miền Nam](http://www.thinhnam.net.in/xo-so-mien-nam) -
+[01/01/2019 - 13h15’](http://www.thinhnam.net.in/xo-so-mien-nam/?ngay=2019-01-01)
+[Nam Định](http://www.thinhnam.net.in/nam-dinh) XSNDH
+[Đà Nẵng](http://www.thinhnam.net.in/da-nang) XSDNG
+"""
+
+
 class ParseTests(unittest.TestCase):
     def test_extracts_first_province_special_prize(self) -> None:
         self.assertEqual(parse_special_prize(TABLE_HTML, DRAW_DATE), "33775")
@@ -50,15 +68,23 @@ class ParseTests(unittest.TestCase):
         with self.assertRaises(ResultNotPublished):
             parse_special_prize(TABLE_HTML, date(2026, 8, 10))
 
-    def test_variations_match_user_rules(self) -> None:
+    def test_draw_result_exposes_each_digit(self) -> None:
         result = DrawResult(DRAW_DATE, "12345", "https://www.thinhnam.net.in/")
-        self.assertEqual(result.variation_c, "45123")
-        self.assertEqual(result.variation_d, "15234")
+        self.assertEqual(result.digits, ("1", "2", "3", "4", "5"))
 
-    def test_variations_preserve_leading_zero(self) -> None:
+    def test_digits_preserve_leading_zero(self) -> None:
         result = DrawResult(DRAW_DATE, "01234", "https://www.thinhnam.net.in/")
-        self.assertEqual(result.variation_c, "34012")
-        self.assertEqual(result.variation_d, "04123")
+        self.assertEqual(result.digits, ("0", "1", "2", "3", "4"))
+
+    def test_reader_markdown_extracts_requested_grand_prize(self) -> None:
+        self.assertEqual(
+            parse_reader_special_prize(READER_MARKDOWN, date(2019, 1, 2)),
+            "24751",
+        )
+
+    def test_reader_markdown_rejects_unpublished_date(self) -> None:
+        with self.assertRaises(ResultNotPublished):
+            parse_reader_special_prize(READER_MARKDOWN, date(2019, 1, 1))
 
     def test_incomplete_http_body_retries_the_next_official_url(self) -> None:
         class Response:

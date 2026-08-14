@@ -12,6 +12,7 @@ import socket
 import time
 import unicodedata
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
 from lxml import html
@@ -45,12 +46,9 @@ class DrawResult:
         validate_prize(self.grand_prize)
 
     @property
-    def variation_c(self) -> str:
-        return self.grand_prize[-2:] + self.grand_prize[:-2]
-
-    @property
-    def variation_d(self) -> str:
-        return self.grand_prize[0] + self.grand_prize[-1] + self.grand_prize[1:-1]
+    def digits(self) -> tuple[str, str, str, str, str]:
+        first, second, third, fourth, fifth = self.grand_prize
+        return first, second, third, fourth, fifth
 
 
 def validate_prize(value: str) -> str:
@@ -217,6 +215,53 @@ def parse_special_prize(page: bytes | str, draw_date: date) -> str:
     )
 
 
+def parse_reader_special_prize(page: bytes | str, draw_date: date) -> str:
+    """Parse a Thinhnam page converted to Markdown by a reader relay."""
+
+    if isinstance(page, bytes):
+        text = page.decode("utf-8", errors="replace")
+    else:
+        text = page
+
+    display_date = draw_date.strftime("%d/%m/%Y")
+    marker = re.search(
+        rf"\[{re.escape(display_date)}\s*-\s*13h15[^\]]*\]",
+        text,
+        re.IGNORECASE,
+    )
+    if marker is None:
+        raise ResultNotPublished(
+            f"reader page does not contain requested date {draw_date.isoformat()}"
+        )
+
+    segment = text[marker.start() :]
+    next_result = segment.find("[KẾT QUẢ XỔ SỐ Miền Nam]", 1)
+    if next_result >= 0:
+        segment = segment[:next_result]
+
+    province = re.search(
+        r"Nam Định.*?\bXSNDH\b(?P<body>.*?)(?:Đà Nẵng|\bXSDNG\b)",
+        segment,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if province is None:
+        raise ResultNotPublished(
+            f"Nam Dinh result is not available for {draw_date.isoformat()}"
+        )
+
+    candidates = _FIVE_DIGITS.findall(province.group("body"))
+    if not candidates:
+        raise ResultNotPublished(
+            f"Nam Dinh grand prize is not available for {draw_date.isoformat()}"
+        )
+    return validate_prize(candidates[-1])
+
+
+def _reader_url(url: str, reader_base: str) -> str:
+    parsed = urlsplit(url)
+    return f"{reader_base.rstrip('/')}/http://{parsed.netloc}{parsed.path}?{parsed.query}"
+
+
 def scrape_date(
     draw_date: date,
     *,
@@ -241,6 +286,7 @@ def scrape_date(
         "Cache-Control": "no-cache",
     }
     proxy_url = os.environ.get("THINHNAM_PROXY_URL", "").strip()
+    reader_base = os.environ.get("THINHNAM_READER_BASE", "").strip()
     opener = (
         build_opener(ProxyHandler({"http": proxy_url, "https": proxy_url}))
         if proxy_url
@@ -250,13 +296,23 @@ def scrape_date(
     for attempt in range(1, max_attempts + 1):
         for template in templates:
             url = source_url(draw_date, template)
-            request = Request(url, headers=headers, method="GET")
+            request_url = _reader_url(url, reader_base) if reader_base else url
+            request_headers = (
+                {"User-Agent": "curl/8.10.1", "Accept": "text/plain"}
+                if reader_base
+                else headers
+            )
+            request = Request(request_url, headers=request_headers, method="GET")
             try:
                 with opener.open(request, timeout=timeout_seconds) as response:
                     body = response.read(8_000_001)
                     if len(body) > 8_000_000:
                         raise ScrapeError("official page exceeded the 8 MB safety limit")
-                    prize = parse_special_prize(body, draw_date)
+                    prize = (
+                        parse_reader_special_prize(body, draw_date)
+                        if reader_base
+                        else parse_special_prize(body, draw_date)
+                    )
                     return DrawResult(draw_date, prize, url)
             except (
                 HTTPError,
@@ -266,7 +322,7 @@ def scrape_date(
                 HTTPException,
                 ScrapeError,
             ) as exc:
-                errors.append(f"{url}: {type(exc).__name__}: {exc}")
+                errors.append(f"{request_url}: {type(exc).__name__}: {exc}")
 
         if attempt < max_attempts:
             time.sleep(min(2 ** (attempt - 1), 20))
